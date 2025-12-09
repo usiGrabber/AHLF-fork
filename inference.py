@@ -13,7 +13,7 @@ parser.add_argument('--tsv', dest='tsv', action='store_const',
 args = parser.parse_args()
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-tf.compat.v1.disable_eager_execution()
+# tf.compat.v1.disable_eager_execution()  # causes compatibility issues with TF 2.x
 from dataset import get_dataset_inference
 from network import network
 

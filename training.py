@@ -3,7 +3,7 @@ import numpy as np
 import sys,os
 #import simplejson
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-tf.compat.v1.disable_eager_execution()
+# tf.compat.v1.disable_eager_execution()  # causes compatibility issues with TF 2.x
 from dataset import get_dataset
 from network import network
 
