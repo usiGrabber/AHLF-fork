@@ -7,7 +7,7 @@
 #SBATCH --mem=16G
 #SBATCH --partition=gpu-batch
 #SBATCH --gpus=1
-#SBATCH --constrain="GPU_SKU:V100&ARCH:X86"
+#SBATCH --constraint="GPU_SKU:V100&ARCH:X86"
 #SBATCH --account=sci-renard-usi-grabber
 
 # Activate conda environment
