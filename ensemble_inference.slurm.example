@@ -1,0 +1,66 @@
+#!/bin/bash
+#SBATCH --job-name=ahlf-ensemble-inference
+#SBATCH --output=slurm_ensemble_inference_%j.out
+#SBATCH --time=24:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --partition=gpu-batch
+#SBATCH --gpus=1
+#SBATCH --constraint="GPU_SKU:V100&ARCH:X86"
+#SBATCH --account=sci-renard-usi-grabber
+
+# Activate conda environment
+eval "$(conda shell.bash hook)"
+conda activate ahlf_interpretation_env
+
+# Define input files
+PHOSPHO_MGF="example/sp_p.mgf"
+NON_PHOSPHO_MGF="example/sp_non_p.mgf"
+
+# Define model weights
+ALPHA_MODEL="model/alpha_model_weights.hdf5"
+BETA_MODEL="model/beta_model_weights.hdf5"
+GAMMA_MODEL="model/gamma_model_weights.hdf5"
+DELTA_MODEL="model/delta_model_weights.hdf5"
+
+# Create output directory
+mkdir -p ensemble_results
+
+echo "Running inference with all four models..."
+
+# Run alpha model
+echo "Running alpha model on phospho spectra..."
+python inference.py $ALPHA_MODEL $PHOSPHO_MGF ensemble_results/alpha_phospho.tsv --tsv
+
+echo "Running alpha model on non-phospho spectra..."
+python inference.py $ALPHA_MODEL $NON_PHOSPHO_MGF ensemble_results/alpha_non_phospho.tsv --tsv
+
+# Run beta model
+echo "Running beta model on phospho spectra..."
+python inference.py $BETA_MODEL $PHOSPHO_MGF ensemble_results/beta_phospho.tsv --tsv
+
+echo "Running beta model on non-phospho spectra..."
+python inference.py $BETA_MODEL $NON_PHOSPHO_MGF ensemble_results/beta_non_phospho.tsv --tsv
+
+# Run gamma model
+echo "Running gamma model on phospho spectra..."
+python inference.py $GAMMA_MODEL $PHOSPHO_MGF ensemble_results/gamma_phospho.tsv --tsv
+
+echo "Running gamma model on non-phospho spectra..."
+python inference.py $GAMMA_MODEL $NON_PHOSPHO_MGF ensemble_results/gamma_non_phospho.tsv --tsv
+
+# Run delta model
+echo "Running delta model on phospho spectra..."
+python inference.py $DELTA_MODEL $PHOSPHO_MGF ensemble_results/delta_phospho.tsv --tsv
+
+echo "Running delta model on non-phospho spectra..."
+python inference.py $DELTA_MODEL $NON_PHOSPHO_MGF ensemble_results/delta_non_phospho.tsv --tsv
+
+echo "All inference runs complete!"
+#echo "Running ensemble combination and evaluation..."
+
+# Run the combination script
+#python combine_ensemble_results.py ensemble_results
+
+#echo "Done!"
