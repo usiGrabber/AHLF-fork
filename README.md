@@ -147,6 +147,8 @@ Hyperparameters can be changed in the **`training.py`** script directly.
 python training.py
 ```
 
+Hint: Use the ahlf_interpretation_env conda environment for faster training on GPU machines.
+
 ## Fine-tuning
 
 In order to fine-tune the model, e.g. to a specific instrument type, you can use **`finetuning.py`**:
@@ -159,6 +161,21 @@ Hyperparameters can be changed in the **`finetuning.py`** script directly.
 ```
 python finetuning.py model/alpha_model_weights.hdf5 model/finetuned_alpha_model_weights.hdf5 ./training
 ```
+
+Hint: Use the ahlf_interpretation_env conda environment for faster training on GPU machines.
+
+### Fine-tuning on HPC with SLURM
+
+For running fine-tuning on an HPC cluster with SLURM, you can use the provided example script:
+
+1. Copy the example SLURM script:
+```
+cp finetune.slurm.example finetune.slurm
+```
+
+2. Edit **`finetune.slurm`** to adjust parameters for your specific needs (account name, resources, paths, etc.)
+
+3. Submit the job
 
 ## General usage
 

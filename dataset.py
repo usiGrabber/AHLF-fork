@@ -31,34 +31,42 @@ def modulo_parse(dummy,mz,intensity):
     trunc_mz = tf.boolean_mask(mz,mask)
     trunc_intensity = tf.boolean_mask(intensity,mask)
 
-    def segment_argmax(values,indices):
-        i = tf.unique(indices)[0]
-        zero,one=tf.zeros(1,dtype=dtype),tf.ones(1,dtype=dtype)
-        return tf.vectorized_map(lambda x: tf.argmax(values*tf.where(indices==x,zero,one)),i)
-    
-    mz_mod = tf.math.floormod(trunc_mz,SEGMENT_SIZE) 
-    mz_div = tf.cast(tf.math.floordiv(trunc_mz-MZ_MIN,SEGMENT_SIZE),tf.int32)
-    
-    uniq_indices, i = tf.unique(mz_div)
-    aggr_intensity = tf.math.segment_max(trunc_intensity,i)
-    argmax_indices = segment_argmax(trunc_intensity,i)
-    aggr_mz_mod = tf.gather(mz_mod,argmax_indices) 
-        
-    aggr_intensity = aggr_intensity#/tf.reduce_sum(intensity**2)
-    aggr_mz_mod = aggr_mz_mod/SEGMENT_SIZE
-
+    # Handle case where all peaks are filtered out
     shape = tf.constant([int((MZ_MAX-MZ_MIN)/SEGMENT_SIZE)])
-    print(uniq_indices,aggr_intensity)
-    print(aggr_mz_mod,aggr_intensity)
-    aggr_mz_mod = tf.scatter_nd(tf.expand_dims(uniq_indices,1), aggr_mz_mod, shape)
-    aggr_intensity = tf.scatter_nd(tf.expand_dims(uniq_indices,1), aggr_intensity, shape)
-    x = aggr_intensity
-    i = aggr_mz_mod
+    def handle_empty():
+        zero_output = tf.zeros(shape, dtype=dtype)
+        return tf.stack([zero_output, zero_output], axis=1), dummy
     
-    x = tf.cast(x,tf.float32)
-    i = tf.cast(i,tf.float32)
-    output = tf.stack([x,i],axis=1)
-    return output, dummy
+    def handle_nonempty():
+        def segment_argmax(values,indices):
+            i = tf.unique(indices)[0]
+            zero,one=tf.zeros(1,dtype=dtype),tf.ones(1,dtype=dtype)
+            return tf.vectorized_map(lambda x: tf.argmax(values*tf.where(indices==x,zero,one)),i)
+        
+        mz_mod = tf.math.floormod(trunc_mz,SEGMENT_SIZE) 
+        mz_div = tf.cast(tf.math.floordiv(trunc_mz-MZ_MIN,SEGMENT_SIZE),tf.int32)
+        
+        uniq_indices, i = tf.unique(mz_div)
+        aggr_intensity = tf.math.segment_max(trunc_intensity,i)
+        argmax_indices = segment_argmax(trunc_intensity,i)
+        aggr_mz_mod = tf.gather(mz_mod,argmax_indices) 
+            
+        aggr_intensity = aggr_intensity#/tf.reduce_sum(intensity**2)
+        aggr_mz_mod = aggr_mz_mod/SEGMENT_SIZE
+
+        print(uniq_indices,aggr_intensity)
+        print(aggr_mz_mod,aggr_intensity)
+        aggr_mz_mod = tf.scatter_nd(tf.expand_dims(uniq_indices,1), aggr_mz_mod, shape)
+        aggr_intensity = tf.scatter_nd(tf.expand_dims(uniq_indices,1), aggr_intensity, shape)
+        x = aggr_intensity
+        i = aggr_mz_mod
+        
+        x = tf.cast(x,tf.float32)
+        i = tf.cast(i,tf.float32)
+        output = tf.stack([x,i],axis=1)
+        return output, dummy
+    
+    return tf.cond(tf.size(trunc_mz) > 0, handle_nonempty, handle_empty)
 
 def tf_preprocess_spectrum(dummy,mz,intensity):
     #global MZ_MAX, SPECTRUM_RESOLUTION
@@ -164,11 +172,14 @@ def get_dataset(dataset='train',maximum_steps=10000,batch_size=16,mode='training
             intensities = entry['intensity array']
             #return len(mz),np.array(mz),np.array(intensities) 
             return label,np.array(mz),np.array(intensities)               
-        try:
-            entry = next(reader)
-            yield get_features(entry)            
-        except: 
-            return
+        while True:
+            try:
+                entry = next(reader)
+                # Skip empty spectra (no peaks)
+                if len(entry['m/z array']) > 0:
+                    yield get_features(entry)            
+            except StopIteration: 
+                return
 
     with mgf.chain.from_iterable(phos_path) as phos_reader, mgf.chain.from_iterable(other_path) as other_reader:
         #ds = tf.data.Dataset.from_generator(lambda: generator(label=None,reader=phos_reader),output_types=(tf.float32,tf.float32,tf.float32),output_shapes=((),None,None))#.repeat(1)#int(batch_size/2))
@@ -215,11 +226,14 @@ def get_dataset_inference(mgf_file='example.mgf',batch_size=16):
             scans = int(entry['params']['scans'])
             #return len(mz),np.array(mz),np.array(intensities) 
             return scans,np.array(mz),np.array(intensities)               
-        try:
-            entry = next(reader)
-            yield get_features(entry)            
-        except: 
-            return
+        while True:
+            try:
+                entry = next(reader)
+                # Skip empty spectra (no peaks)
+                if len(entry['m/z array']) > 0:
+                    yield get_features(entry)            
+            except StopIteration: 
+                return
 
     with mgf.chain.from_iterable([mgf_file]) as mgf_reader:
         ds = tf.data.Dataset.from_generator(lambda: generator(label=None,reader=mgf_reader),output_types=(tf.float32,tf.float32,tf.float32),output_shapes=((),None,None))
