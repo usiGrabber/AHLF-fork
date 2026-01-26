@@ -196,7 +196,7 @@ Hint: The pipeline expects the input mgf files to be split by class. Make sure t
 sbatch ensemble_inference.slurm
 ```
 
-4. After all ensemble jobs complete, combine results using **`combine_ensemble_results.py`**:
+5. After all ensemble jobs complete, combine results using **`combine_ensemble_results.py`**:
 ```
 python combine_ensemble_results.py ensemble_results --output ensemble_combined_results.tsv
 ```
