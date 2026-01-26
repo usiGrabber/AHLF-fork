@@ -186,16 +186,19 @@ For running ensemble inference on an HPC cluster with SLURM, use the provided ex
 cp ensemble_inference.slurm.example ensemble_inference.slurm
 ```
 
-2. Edit **`ensemble_inference.slurm`** to adjust parameters for your specific needs (account name, resources, model paths, input/output directories, etc.)
+2. Edit **`ensemble_inference.slurm`** to adjust parameters for your specific needs (account name, resources, model paths, input/output directories, etc.).
+Hint: The pipeline expects the input mgf files to be split by class. Make sure to adjust the input paths accordingly.
 
-3. Submit the job:
+3. Make sure to create the conda env `ahlf_interpretation_env` on the HPC system before submitting the job (see below for instructions).
+
+4. Submit the job:
 ```
 sbatch ensemble_inference.slurm
 ```
 
 4. After all ensemble jobs complete, combine results using **`combine_ensemble_results.py`**:
 ```
-python combine_ensemble_results.py --input_dir ./ensemble_results --output_file ensemble_combined_results.tsv
+python combine_ensemble_results.py ensemble_results --output ensemble_combined_results.tsv
 ```
 
 This creates a combined TSV file with prediction scores averaged across all ensemble models.
