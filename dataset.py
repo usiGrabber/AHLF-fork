@@ -1,7 +1,7 @@
 from pyteomics import mgf
 import tensorflow as tf
 import numpy as np
-import os,glob
+import glob
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -54,8 +54,8 @@ def modulo_parse(dummy,mz,intensity):
         aggr_intensity = aggr_intensity#/tf.reduce_sum(intensity**2)
         aggr_mz_mod = aggr_mz_mod/SEGMENT_SIZE
 
-        print(uniq_indices,aggr_intensity)
-        print(aggr_mz_mod,aggr_intensity)
+        #print(uniq_indices,aggr_intensity)
+        #print(aggr_mz_mod,aggr_intensity)
         aggr_mz_mod = tf.scatter_nd(tf.expand_dims(uniq_indices,1), aggr_mz_mod, shape)
         aggr_intensity = tf.scatter_nd(tf.expand_dims(uniq_indices,1), aggr_intensity, shape)
         x = aggr_intensity
@@ -154,7 +154,7 @@ def parse(dummy,mz,intensity):
     output = tf.stack([x,i],axis=1)
     return output, dummy 
 
-def get_dataset(dataset='train',maximum_steps=10000,batch_size=16,mode='training',weights=None):
+def get_dataset(dataset=['train'],maximum_steps=10000,batch_size=16,mode='training',weights=None):
     buffer_size=1*10**6 # in steps
 
     phos_path=[glob.glob('%s/*.phos.mgf'%(x)) for x in dataset]

@@ -1,0 +1,16 @@
+name: ahlf_training_env
+channels:
+  - defaults 
+  - bioconda
+  - conda-forge
+dependencies:
+  - tensorflow-gpu=2.4.1
+  - python=3.8
+  - numpy=1.23
+  - pyteomics=4.7.5
+  - shap=0.42.1
+  - matplotlib=3.7.2
+  - pip:
+    - wandb>=0.22
+
+  
