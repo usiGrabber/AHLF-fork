@@ -147,7 +147,7 @@ Hyperparameters can be changed in the **`training.py`** script directly.
 python training.py
 ```
 
-Hint: Use the ahlf_interpretation_env conda environment for faster training on GPU machines.
+Hint: Use the ahlf_training_env conda environment for faster training on GPU machines.
 
 ## Fine-tuning
 
