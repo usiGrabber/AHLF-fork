@@ -166,19 +166,19 @@ def get_dataset(dataset=['train'],maximum_steps=10000,batch_size=16,mode='traini
         np.random.shuffle(phos_path)
         np.random.shuffle(other_path)
 
-    def generator(label,reader):    
+    def generator(label,reader):
         def get_features(entry):
             mz = entry['m/z array']
             intensities = entry['intensity array']
-            #return len(mz),np.array(mz),np.array(intensities) 
-            return label,np.array(mz),np.array(intensities)               
+            #return len(mz),np.array(mz),np.array(intensities)
+            return label,np.array(mz),np.array(intensities)
         while True:
             try:
                 entry = next(reader)
                 # Skip empty spectra (no peaks)
                 if len(entry['m/z array']) > 0:
-                    yield get_features(entry)            
-            except StopIteration: 
+                    yield get_features(entry)
+            except StopIteration:
                 return
 
     with mgf.chain.from_iterable(phos_path) as phos_reader, mgf.chain.from_iterable(other_path) as other_reader:
@@ -188,12 +188,18 @@ def get_dataset(dataset=['train'],maximum_steps=10000,batch_size=16,mode='traini
 
         if mode=='training':
             drop_remainder=False
-            ds = tf.compat.v1.data.experimental.sample_from_datasets([phos_ds,other_ds],weights)            
-            #ds = ds.shuffle(buffer_size=buffer_size,reshuffle_each_iteration=False)            
-        elif mode=='test': 
+            # Balance datasets equally (50/50) if weights not specified
+            if weights is None:
+                weights = [0.5, 0.5]
+            ds = tf.compat.v1.data.experimental.sample_from_datasets([phos_ds,other_ds],weights)
+            #ds = ds.shuffle(buffer_size=buffer_size,reshuffle_each_iteration=False)
+        elif mode=='test':
             drop_remainder=False
-            ds = tf.compat.v1.data.experimental.sample_from_datasets([phos_ds,other_ds],weights,seed=42) 
-            #ds = ds.shuffle(buffer_size=buffer_size,reshuffle_each_iteration=False) 
+            # Balance datasets equally (50/50) if weights not specified
+            if weights is None:
+                weights = [0.5, 0.5]
+            ds = tf.compat.v1.data.experimental.sample_from_datasets([phos_ds,other_ds],weights,seed=42)
+            #ds = ds.shuffle(buffer_size=buffer_size,reshuffle_each_iteration=False)
         elif mode=='inference':
             drop_remainder=False
             ds = other_ds.concatenate(phos_ds)
