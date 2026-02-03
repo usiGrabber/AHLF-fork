@@ -14,7 +14,7 @@ saving = True
 # Initialize wandb. Use disabled mode for debugging without logging.
 # wandb.init(mode="disabled")
 wandb.init(
-    project="usiGrabber_AHLF",
+    project="ahlf-training",
     config={
         "channels": 64,
         "num_conv_layers": 13,
@@ -50,15 +50,14 @@ learning_rate=5.0e-6
 model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate,clipnorm=1.0),loss=bce,metrics=['binary_accuracy','Recall','Precision'])
 
 batch_size=64
+# Total samples in training directory (50/50 phospho/non-phospho)
+num_samples= 6596016 * 2
+steps_per_epoch=num_samples // batch_size
 
-steps=1000
-maximum_steps=batch_size*steps
-steps_per_epoch=steps
-
-train_data = get_dataset(dataset=['./training'],maximum_steps=maximum_steps,batch_size=batch_size,mode='training').prefetch(buffer_size=AUTOTUNE)
+train_data = get_dataset(dataset=['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final'],maximum_steps=None,batch_size=batch_size,mode='training').prefetch(buffer_size=AUTOTUNE)
 
 if train:
-    model.fit(train_data,steps_per_epoch=steps_per_epoch,epochs=10,callbacks=callbacks)
+    model.fit(train_data,steps_per_epoch=steps_per_epoch,epochs=100,callbacks=callbacks)
 
 if saving:
     model.save_weights('model_weights_train2.hdf5')

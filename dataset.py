@@ -154,7 +154,7 @@ def parse(dummy,mz,intensity):
     output = tf.stack([x,i],axis=1)
     return output, dummy 
 
-def get_dataset(dataset=['train'],maximum_steps=10000,batch_size=16,mode='training',weights=None):
+def get_dataset(dataset=['train'],maximum_steps=None,batch_size=16,mode='training',weights=None):
     buffer_size=1*10**6 # in steps
 
     phos_path=[glob.glob('%s/*.phos.mgf'%(x)) for x in dataset]
