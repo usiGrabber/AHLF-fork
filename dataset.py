@@ -129,12 +129,27 @@ def tf_maxpool_with_argmax(dense,k):
     i = tf.math.argmax(dense,axis=-1)
     return x,i
 
-def ion_current_normalize(intensities):
-    # Option 1: Max Scaling (Recommended - sets highest peak to 1.0)
-    max_val = tf.reduce_max(intensities)
+# NAME=Matthis
+# def ion_current_normalize(intensities):
+#     # Option 1: Max Scaling (Recommended - sets highest peak to 1.0)
+#     max_val = tf.reduce_max(intensities)
     
-    # Avoid division by zero if spectrum is empty
-    return tf.math.divide_no_nan(intensities, max_val)
+#     # Avoid division by zero if spectrum is empty
+#     return tf.math.divide_no_nan(intensities, max_val)
+
+# NAME=l2
+# def ion_current_normalize(intensities):
+#     # Option 1: Max Scaling (Recommended - sets highest peak to 1.0)
+#     max_val = tf.reduce_sum((intensities**2)**0.5)
+    
+#     # Avoid division by zero if spectrum is empty
+#     return tf.math.divide_no_nan(intensities, max_val)
+
+# NAME=ORIGINAL
+def ion_current_normalize(intensities):
+    total_sum = tf.reduce_sum(intensities**2)
+    normalized = intensities/total_sum
+    return normalized
 
 def standardize(intensities,global_mean,global_var,noise=False):
     #ion_current = tf.reduce_sum(intensities**2)

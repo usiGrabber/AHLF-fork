@@ -22,14 +22,12 @@ def load_and_combine_predictions(results_dir, prefix):
     Returns:
         DataFrame with combined predictions
     """
-    models = ['alpha', 'beta', 'gamma', 'delta']
     
     # Load all model predictions
     dfs = []
-    for model in models:
-        filename = os.path.join(results_dir, f'{model}_{prefix}.tsv')
-        df = pd.read_csv(filename, sep='\t', index_col=0)
-        dfs.append(df)
+    filename = os.path.join(results_dir, f'{prefix}.tsv')
+    df = pd.read_csv(filename, sep='\t', index_col=0)
+    dfs.append(df)
 
     # Ensure all files have the same length
     lengths = [len(df) for df in dfs]

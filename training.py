@@ -23,16 +23,17 @@ wandb.init(
         "kernel_size": 2,
         "padding": "same",
         "dropout": 0.2,
-        "learning_rate": 5.0e-6,
+        "learning_rate": 3.0e-4,
         "optimizer": "Adam",
         "loss": "BinaryCrossentropy",
-        "batch_size": 128,
+        "batch_size": 64,
         "epochs": 10,
         "input_shape": [3600, 2],
         "val_freq": 500,
         "val_steps": 200,
         "checkpoint_freq": 4000,
-        "val_ratio": 0.1
+        "val_ratio": 0.1,
+        "ion_current_normalize": "original"
     }
 )
 
@@ -77,7 +78,7 @@ class StepCheckpointCallback(tf.keras.callbacks.Callback):
     def on_train_batch_end(self, batch, logs=None):
         self.step_count += 1
         if self.step_count % self.checkpoint_freq == 0:
-            path = os.path.join(self.checkpoint_dir, f'step_{self.step_count}.weights.h5')
+            path = os.path.join(self.checkpoint_dir, f'{wandb.run.id}-step_{self.step_count}.weights.hdf5')
             self.model.save_weights(path)
             # Log as wandb artifact
             artifact = wandb.Artifact(f'checkpoint-step-{self.step_count}', type='model')
@@ -102,7 +103,7 @@ num_samples= 6596016 * 2
 # Adjust for train/val split - only (1 - val_ratio) of samples go to training
 steps_per_epoch = int(num_samples * (1 - config.val_ratio)) // batch_size
 
-data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/no_threshold_shuffled3']
+data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/no_threshold_shuffled3/']
 
 train_data = get_dataset(
     dataset=data_path,

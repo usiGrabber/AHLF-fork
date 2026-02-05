@@ -3,3 +3,4 @@ slurm_*
 wandb
 __pycache__
 checkpoints
+ensemble_results
