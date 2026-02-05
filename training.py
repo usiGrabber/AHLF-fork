@@ -15,6 +15,7 @@ saving = True
 # Initialize wandb. Use disabled mode for debugging without logging.
 # wandb.init(mode="disabled")
 wandb.init(
+    entity="mp2025-usigrabber",
     project="ahlf-training",
     config={
         "channels": 64,
