@@ -29,7 +29,7 @@ wandb.init(
         "batch_size": 128,
         "epochs": 10,
         "input_shape": [3600, 2],
-        "val_freq": 2000,
+        "val_freq": 500,
         "val_steps": 200,
         "checkpoint_freq": 4000,
         "val_ratio": 0.1
@@ -102,7 +102,7 @@ num_samples= 6596016 * 2
 # Adjust for train/val split - only (1 - val_ratio) of samples go to training
 steps_per_epoch = int(num_samples * (1 - config.val_ratio)) // batch_size
 
-data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/no_threshold']
+data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/no_threshold_shuffled3']
 
 train_data = get_dataset(
     dataset=data_path,

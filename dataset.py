@@ -1,9 +1,12 @@
+from typing import Literal
 from pyteomics import mgf
 import tensorflow as tf
 import numpy as np
 import glob
 import gc
 import os
+import re
+
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -158,6 +161,8 @@ def parse(dummy,mz,intensity):
     output = tf.stack([x,i],axis=1)
     return output, dummy 
 
+MAX_FILE_BUCKETS = 400
+
 def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='training', weights=None, split='train', val_ratio=0.1):
     """
     Args:
@@ -168,11 +173,31 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
     buffer_size = 50000
     print("--- [DEBUG] Starting get_dataset execution ---", flush=True)
 
+    def file_based_train_val_split(paths, split):
+        threshold_bucket = val_ratio * MAX_FILE_BUCKETS
+        for path in paths:
+            # bucket_index = re.search("bucket_([0-9]{4})", "bucket_0394.phos.mgf").group(1)
+            bucket_index = int(re.search("bucket_([0-9]{4})", str(path)).group(1))
+            if bucket_index < threshold_bucket:
+                mode = "val"
+            else:
+                mode = "train"
+            
+            if mode == split:
+                yield path
+
+
     # 1. Collect File Paths
     phos_path = [glob.glob('%s/*.phos.mgf' % (x)) for x in dataset]
     phos_path = [i for g in phos_path for i in g]
+    phos_path = list(file_based_train_val_split(phos_path, split))
+    
     other_path = [glob.glob('%s/*.other.mgf' % (x)) for x in dataset]
     other_path = [i for g in other_path for i in g]
+    other_path = list(file_based_train_val_split(other_path, split))
+
+  
+
 
     print(f"--- [DEBUG] File Search Complete: Found {len(phos_path)} PHOS files and {len(other_path)} OTHER files --- {split}", flush=True)
 
@@ -181,21 +206,21 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
         np.random.shuffle(other_path)
 
     # Compute validation threshold from ratio (e.g., 0.1 -> samples with hash % 1000 < 100 go to val)
-    hash_modulo = 1000
+    hash_modulo = 400
     val_threshold = int(hash_modulo * val_ratio)
 
     # 2. Generator with train/val split support
     def generator(file_list, label, split):
-        def belongs_to_split(mz_array):
-            """Determine if sample belongs to train or val based on hash of m/z data."""
-            if split == 'all':
-                return True
-            sample_hash = hash(mz_array.tobytes()) % hash_modulo
-            is_val = sample_hash < val_threshold
-            if split == 'val':
-                return is_val
-            else:  # split == 'train'
-                return not is_val
+        # def belongs_to_split(mz_array):
+        #     """Determine if sample belongs to train or val based on hash of m/z data."""
+        #     if split == 'all':
+        #         return True
+        #     sample_hash = hash(mz_array.tobytes()) % hash_modulo
+        #     is_val = sample_hash < val_threshold
+        #     if split == 'val':
+        #         return is_val
+        #     else:  # split == 'train'
+        #         return not is_val
 
         for i, file_path in enumerate(file_list):
             # Print occasionally to show life
@@ -209,9 +234,9 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
                         mz = entry['m/z array']
                         if len(mz) > 0:
                             # Only yield if sample belongs to requested split
-                            if belongs_to_split(mz):
-                                intensities = entry['intensity array']
-                                yield label, np.array(mz), np.array(intensities)
+                            # if belongs_to_split(mz_array=mz):
+                            intensities = entry['intensity array']
+                            yield label, np.array(mz), np.array(intensities)
             except Exception as e:
                 print(f"[ERROR] Failed reading {file_path}: {e}", flush=True)
                 continue
