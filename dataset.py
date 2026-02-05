@@ -174,7 +174,7 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
     other_path = [glob.glob('%s/*.other.mgf' % (x)) for x in dataset]
     other_path = [i for g in other_path for i in g]
 
-    print(f"--- [DEBUG] File Search Complete: Found {len(phos_path)} PHOS files and {len(other_path)} OTHER files ---", flush=True)
+    print(f"--- [DEBUG] File Search Complete: Found {len(phos_path)} PHOS files and {len(other_path)} OTHER files --- {split}", flush=True)
 
     if mode == 'training' or mode == 'test':
         np.random.shuffle(phos_path)
@@ -200,7 +200,7 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
         for i, file_path in enumerate(file_list):
             # Print occasionally to show life
            
-            print(f"--- [DEBUG] Generator processing file #{i}: {os.path.basename(file_path)} ---", flush=True)
+            print(f"--- [DEBUG] Generator processing file #{i} {split}: {os.path.basename(file_path)} ---", flush=True)
 
             try:
                 # use_index=False is CRITICAL to prevent memory explosion
