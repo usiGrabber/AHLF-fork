@@ -2,6 +2,8 @@ from pyteomics import mgf
 import tensorflow as tf
 import numpy as np
 import glob
+import gc
+import os
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -125,9 +127,11 @@ def tf_maxpool_with_argmax(dense,k):
     return x,i
 
 def ion_current_normalize(intensities):
-    total_sum = tf.reduce_sum(intensities**2)
-    normalized = intensities/total_sum
-    return normalized
+    # Option 1: Max Scaling (Recommended - sets highest peak to 1.0)
+    max_val = tf.reduce_max(intensities)
+    
+    # Avoid division by zero if spectrum is empty
+    return tf.math.divide_no_nan(intensities, max_val)
 
 def standardize(intensities,global_mean,global_var,noise=False):
     #ion_current = tf.reduce_sum(intensities**2)
@@ -154,73 +158,96 @@ def parse(dummy,mz,intensity):
     output = tf.stack([x,i],axis=1)
     return output, dummy 
 
-def get_dataset(dataset=['train'],maximum_steps=None,batch_size=16,mode='training',weights=None):
-    buffer_size=1*10**6 # in steps
+def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='training', weights=None):
+    
+    # --- CONFIG ---
+    buffer_size = 50000 
+    print("--- [DEBUG] Starting get_dataset execution ---", flush=True)
 
-    phos_path=[glob.glob('%s/*.phos.mgf'%(x)) for x in dataset]
-    phos_path=[i for g in phos_path for i in g] # flatten
-    other_path=[glob.glob('%s/*.other.mgf'%(x)) for x in dataset]
-    other_path=[i for g in other_path for i in g] # flatten
+    # 1. Collect File Paths
+    phos_path = [glob.glob('%s/*.phos.mgf' % (x)) for x in dataset]
+    phos_path = [i for g in phos_path for i in g]
+    other_path = [glob.glob('%s/*.other.mgf' % (x)) for x in dataset]
+    other_path = [i for g in other_path for i in g]
 
-    if mode=='training' or mode=='test':
+    print(f"--- [DEBUG] File Search Complete: Found {len(phos_path)} PHOS files and {len(other_path)} OTHER files ---", flush=True)
+
+    if mode == 'training' or mode == 'test':
         np.random.shuffle(phos_path)
         np.random.shuffle(other_path)
 
-    def generator(label,reader):
-        def get_features(entry):
-            mz = entry['m/z array']
-            intensities = entry['intensity array']
-            #return len(mz),np.array(mz),np.array(intensities)
-            return label,np.array(mz),np.array(intensities)
-        while True:
+    # 2. Generator
+    def generator(file_list, label):
+        for i, file_path in enumerate(file_list):
+            # Print occasionally to show life
+            if i % 10 == 0:
+                print(f"--- [DEBUG] Generator processing file #{i}: {os.path.basename(file_path)} ---", flush=True)
+            
             try:
-                entry = next(reader)
-                # Skip empty spectra (no peaks)
-                if len(entry['m/z array']) > 0:
-                    yield get_features(entry)
-            except StopIteration:
-                return
+                # use_index=False is CRITICAL to prevent memory explosion
+                with mgf.read(file_path, use_index=False) as reader:
+                    for entry in reader:
+                        mz = entry['m/z array']
+                        if len(mz) > 0:
+                            intensities = entry['intensity array']
+                            yield label, np.array(mz), np.array(intensities)
+            except Exception as e:
+                print(f"[ERROR] Failed reading {file_path}: {e}", flush=True)
+                continue
+            
+            # Simple cleanup
+            if i % 10 == 0:
+                gc.collect()
 
-    with mgf.chain.from_iterable(phos_path) as phos_reader, mgf.chain.from_iterable(other_path) as other_reader:
-        #ds = tf.data.Dataset.from_generator(lambda: generator(label=None,reader=phos_reader),output_types=(tf.float32,tf.float32,tf.float32),output_shapes=((),None,None))#.repeat(1)#int(batch_size/2))
-        phos_ds = tf.data.Dataset.from_generator(lambda: generator(label=1.0,reader=phos_reader),output_types=(tf.float32,tf.float32,tf.float32),output_shapes=((),None,None))#.repeat(1)#int(batch_size/2))
-        other_ds = tf.data.Dataset.from_generator(lambda: generator(label=0.0,reader=other_reader),output_types=(tf.float32,tf.float32,tf.float32),output_shapes=((),None,None))#.repeat(1)#int(batch_size/2))
+    print("--- [DEBUG] Defining Generators (Lazy Loading) ---", flush=True)
+    
+    phos_ds = tf.data.Dataset.from_generator(
+        lambda: generator(phos_path, 1.0),
+        output_types=(tf.float32, tf.float32, tf.float32),
+        output_shapes=((), None, None)
+    )
+    
+    other_ds = tf.data.Dataset.from_generator(
+        lambda: generator(other_path, 0.0),
+        output_types=(tf.float32, tf.float32, tf.float32),
+        output_shapes=((), None, None)
+    )
 
-        if mode=='training':
-            drop_remainder=False
-            # Balance datasets equally (50/50) if weights not specified
-            if weights is None:
-                weights = [0.5, 0.5]
-            ds = tf.compat.v1.data.experimental.sample_from_datasets([phos_ds,other_ds],weights)
-            #ds = ds.shuffle(buffer_size=buffer_size,reshuffle_each_iteration=False)
-        elif mode=='test':
-            drop_remainder=False
-            # Balance datasets equally (50/50) if weights not specified
-            if weights is None:
-                weights = [0.5, 0.5]
-            ds = tf.compat.v1.data.experimental.sample_from_datasets([phos_ds,other_ds],weights,seed=42)
-            #ds = ds.shuffle(buffer_size=buffer_size,reshuffle_each_iteration=False)
-        elif mode=='inference':
-            drop_remainder=False
-            ds = other_ds.concatenate(phos_ds)
+    print("--- [DEBUG] Merging Datasets ---", flush=True)
 
-        ### MAP & BATCH-REPEAT  ###        
-        ds = ds.map(lambda label,mz,intensities: tuple(modulo_parse(label,mz,intensities)),num_parallel_calls=AUTOTUNE) 
-        #ds = ds.repeat(batch_size)        
-        if maximum_steps is None:
-            ds = ds.repeat()
-        else: 
-            ds = ds.repeat(int(maximum_steps/2))#int(maximum_steps/(batch_size))) 
+    # --- FIX: Use experimental.sample_from_datasets for older TF versions ---
+    if mode == 'training':
+        if weights is None: weights = [0.5, 0.5]
+        # CHANGE HERE: Added .experimental to fix your AttributeError
+        ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights)
+    elif mode == 'test':
+        if weights is None: weights = [0.5, 0.5]
+        # CHANGE HERE: Added .experimental
+        ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights, seed=42)
+    elif mode == 'inference':
+        ds = other_ds.concatenate(phos_ds)
 
-        ### SHUFFLE ###
-        if mode=='training':     
-            ds = ds.shuffle(buffer_size=buffer_size,reshuffle_each_iteration=False)            
-        elif mode=='test': 
-            ds = ds.shuffle(buffer_size=buffer_size,reshuffle_each_iteration=False,seed=42) 
+    print("--- [DEBUG] Applying Map Functions ---", flush=True)
 
-        ### CACHE & EPOCH-REPEAT  ###
-        ds = ds.batch(batch_size,drop_remainder=drop_remainder)
+    # 3. Pipeline Construction
+    ds = ds.map(
+        lambda label, mz, intensities: tuple(modulo_parse(label, mz, intensities)), 
+        num_parallel_calls=4
+    ) 
+    
+    if maximum_steps is None:
+        ds = ds.repeat()
+    else: 
+        ds = ds.repeat(int(maximum_steps/2))
 
+    if mode in ['training', 'test']:
+        print("--- [DEBUG] Initializing Shuffle Buffer (May take time to fill) ---", flush=True)
+        ds = ds.shuffle(buffer_size=buffer_size, reshuffle_each_iteration=False)
+
+    ds = ds.batch(batch_size, drop_remainder=False)
+    ds = ds.prefetch(buffer_size=5)
+
+    print("--- [DEBUG] Dataset Ready. Returning to Main Loop. ---", flush=True)
     return ds
 
 def get_dataset_inference(mgf_file='example.mgf',batch_size=16):
