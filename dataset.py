@@ -199,8 +199,8 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
 
         for i, file_path in enumerate(file_list):
             # Print occasionally to show life
-            if i % 10 == 0:
-                print(f"--- [DEBUG] Generator processing file #{i}: {os.path.basename(file_path)} ---", flush=True)
+           
+            print(f"--- [DEBUG] Generator processing file #{i}: {os.path.basename(file_path)} ---", flush=True)
 
             try:
                 # use_index=False is CRITICAL to prevent memory explosion

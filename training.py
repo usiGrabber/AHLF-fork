@@ -26,13 +26,12 @@ wandb.init(
         "learning_rate": 5.0e-6,
         "optimizer": "Adam",
         "loss": "BinaryCrossentropy",
-        "batch_size": 64,
-        "steps_per_epoch": 1000,
+        "batch_size": 128,
         "epochs": 10,
         "input_shape": [3600, 2],
-        "val_freq": 1000,
+        "val_freq": 2000,
         "val_steps": 200,
-        "checkpoint_freq": 1000,
+        "checkpoint_freq": 4000,
         "val_ratio": 0.1
     }
 )
@@ -94,16 +93,16 @@ sigm = net(inp)
 model = tf.keras.Model(inputs=inp,outputs=sigm)
 bce=tf.keras.losses.BinaryCrossentropy(from_logits=False)
 
-learning_rate=5.0e-6
+learning_rate=config.learning_rate
 model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate,clipnorm=1.0),loss=bce,metrics=['binary_accuracy','Recall','Precision'])
 
-batch_size=64
+batch_size=config.batch_size
 # Total samples in training directory (50/50 phospho/non-phospho)
 num_samples= 6596016 * 2
 # Adjust for train/val split - only (1 - val_ratio) of samples go to training
 steps_per_epoch = int(num_samples * (1 - config.val_ratio)) // batch_size
 
-data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final']
+data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/no_threshold']
 
 train_data = get_dataset(
     dataset=data_path,
