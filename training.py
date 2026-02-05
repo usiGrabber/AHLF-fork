@@ -1,7 +1,8 @@
 import tensorflow as tf
 import wandb
+import os
 
-from wandb.integration.keras import WandbMetricsLogger, WandbModelCheckpoint
+from wandb.integration.keras import WandbMetricsLogger
 from dataset import get_dataset
 from network import network
 
@@ -27,16 +28,62 @@ wandb.init(
         "batch_size": 64,
         "steps_per_epoch": 1000,
         "epochs": 10,
-        "input_shape": [3600, 2]
+        "input_shape": [3600, 2],
+        "val_freq": 1000,
+        "val_steps": 200,
+        "checkpoint_freq": 1000,
+        "val_ratio": 0.1
     }
 )
 
 config = wandb.config
 
-callbacks = [
-    WandbMetricsLogger(log_freq=50),
-    WandbModelCheckpoint("models")
-]
+
+class ValidationCallback(tf.keras.callbacks.Callback):
+    """Run validation every val_freq training steps."""
+
+    def __init__(self, val_data, val_freq, val_steps):
+        super().__init__()
+        self.val_data = val_data
+        self.val_freq = val_freq
+        self.val_steps = val_steps
+        self.step_count = 0
+
+    def on_train_batch_end(self, batch, logs=None):
+        self.step_count += 1
+        if self.step_count % self.val_freq == 0:
+            val_results = self.model.evaluate(
+                self.val_data,
+                steps=self.val_steps,
+                verbose=0,
+                return_dict=True
+            )
+            # Log with val_ prefix to wandb
+            wandb.log({f'val_{k}': v for k, v in val_results.items()}, step=self.step_count)
+            print(f"\nStep {self.step_count} - Val: " +
+                  ", ".join([f"{k}: {v:.4f}" for k, v in val_results.items()]))
+
+
+class StepCheckpointCallback(tf.keras.callbacks.Callback):
+    """Save checkpoint every checkpoint_freq training steps."""
+
+    def __init__(self, checkpoint_freq, checkpoint_dir='checkpoints'):
+        super().__init__()
+        self.checkpoint_freq = checkpoint_freq
+        self.checkpoint_dir = checkpoint_dir
+        self.step_count = 0
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+    def on_train_batch_end(self, batch, logs=None):
+        self.step_count += 1
+        if self.step_count % self.checkpoint_freq == 0:
+            path = os.path.join(self.checkpoint_dir, f'step_{self.step_count}.weights.h5')
+            self.model.save_weights(path)
+            # Log as wandb artifact
+            artifact = wandb.Artifact(f'checkpoint-step-{self.step_count}', type='model')
+            artifact.add_file(path)
+            wandb.log_artifact(artifact)
+            print(f"\nCheckpoint saved: {path}")
 
 ch = 64
 net = network([ch,ch,ch,ch,ch,ch,ch,ch,ch,ch,ch,ch,ch],kernel_size=2,padding='same',dropout=.2) 
@@ -52,12 +99,37 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate,cli
 batch_size=64
 # Total samples in training directory (50/50 phospho/non-phospho)
 num_samples= 6596016 * 2
-steps_per_epoch=num_samples // batch_size
+# Adjust for train/val split - only (1 - val_ratio) of samples go to training
+steps_per_epoch = int(num_samples * (1 - config.val_ratio)) // batch_size
 
-train_data = get_dataset(dataset=['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final'],maximum_steps=None,batch_size=batch_size,mode='training').prefetch(buffer_size=AUTOTUNE)
+data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final']
+
+train_data = get_dataset(
+    dataset=data_path,
+    maximum_steps=None,
+    batch_size=batch_size,
+    mode='training',
+    split='train',
+    val_ratio=config.val_ratio
+).prefetch(buffer_size=AUTOTUNE)
+
+val_data = get_dataset(
+    dataset=data_path,
+    maximum_steps=None,
+    batch_size=batch_size,
+    mode='training',
+    split='val',
+    val_ratio=config.val_ratio
+).prefetch(buffer_size=AUTOTUNE)
+
+callbacks = [
+    WandbMetricsLogger(log_freq=50),
+    ValidationCallback(val_data, val_freq=config.val_freq, val_steps=config.val_steps),
+    StepCheckpointCallback(checkpoint_freq=config.checkpoint_freq)
+]
 
 if train:
-    model.fit(train_data,steps_per_epoch=steps_per_epoch,epochs=100,callbacks=callbacks)
+    model.fit(train_data, steps_per_epoch=steps_per_epoch, epochs=100, callbacks=callbacks)
 
 if saving:
     model.save_weights('model_weights_train2.hdf5')

@@ -158,11 +158,13 @@ def parse(dummy,mz,intensity):
     output = tf.stack([x,i],axis=1)
     return output, dummy 
 
-def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='training', weights=None):
-    
-    # --- CONFIG ---
-    buffer_size = 50000 
-    print("--- [DEBUG] Starting get_dataset execution ---", flush=True)
+def get_dataset(dataset=['train'],maximum_steps=None,batch_size=16,mode='training',weights=None,split='train',val_ratio=0.1):
+    """
+    Args:
+        split: 'train', 'val', or 'all' (no splitting). Used for train/val separation.
+        val_ratio: Fraction of data for validation (default 0.1 = 10%)
+    """
+    buffer_size=1*10**6 # in steps
 
     # 1. Collect File Paths
     phos_path = [glob.glob('%s/*.phos.mgf' % (x)) for x in dataset]
@@ -176,42 +178,43 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
         np.random.shuffle(phos_path)
         np.random.shuffle(other_path)
 
-    # 2. Generator
-    def generator(file_list, label):
-        for i, file_path in enumerate(file_list):
-            # Print occasionally to show life
-            if i % 10 == 0:
-                print(f"--- [DEBUG] Generator processing file #{i}: {os.path.basename(file_path)} ---", flush=True)
-            
-            try:
-                # use_index=False is CRITICAL to prevent memory explosion
-                with mgf.read(file_path, use_index=False) as reader:
-                    for entry in reader:
-                        mz = entry['m/z array']
-                        if len(mz) > 0:
-                            intensities = entry['intensity array']
-                            yield label, np.array(mz), np.array(intensities)
-            except Exception as e:
-                print(f"[ERROR] Failed reading {file_path}: {e}", flush=True)
-                continue
-            
-            # Simple cleanup
-            if i % 10 == 0:
-                gc.collect()
+    # Compute validation threshold from ratio (e.g., 0.1 -> samples with hash % 1000 < 100 go to val)
+    hash_modulo = 1000
+    val_threshold = int(hash_modulo * val_ratio)
 
-    print("--- [DEBUG] Defining Generators (Lazy Loading) ---", flush=True)
-    
-    phos_ds = tf.data.Dataset.from_generator(
-        lambda: generator(phos_path, 1.0),
-        output_types=(tf.float32, tf.float32, tf.float32),
-        output_shapes=((), None, None)
-    )
-    
-    other_ds = tf.data.Dataset.from_generator(
-        lambda: generator(other_path, 0.0),
-        output_types=(tf.float32, tf.float32, tf.float32),
-        output_shapes=((), None, None)
-    )
+    def generator(label,reader,split):
+        def get_features(entry):
+            mz = entry['m/z array']
+            intensities = entry['intensity array']
+            #return len(mz),np.array(mz),np.array(intensities)
+            return label,np.array(mz),np.array(intensities)
+
+        def belongs_to_split(mz_array, split):
+            """Determine if sample belongs to train or val based on hash of m/z data."""
+            if split == 'all':
+                return True
+            sample_hash = hash(mz_array.tobytes()) % hash_modulo
+            is_val = sample_hash < val_threshold
+            if split == 'val':
+                return is_val
+            else:  # split == 'train'
+                return not is_val
+
+        while True:
+            try:
+                entry = next(reader)
+                # Skip empty spectra (no peaks)
+                if len(entry['m/z array']) > 0:
+                    # Only yield if sample belongs to requested split
+                    if belongs_to_split(entry['m/z array'], split):
+                        yield get_features(entry)
+            except StopIteration:
+                return
+
+    with mgf.chain.from_iterable(phos_path) as phos_reader, mgf.chain.from_iterable(other_path) as other_reader:
+        #ds = tf.data.Dataset.from_generator(lambda: generator(label=None,reader=phos_reader),output_types=(tf.float32,tf.float32,tf.float32),output_shapes=((),None,None))#.repeat(1)#int(batch_size/2))
+        phos_ds = tf.data.Dataset.from_generator(lambda: generator(label=1.0,reader=phos_reader,split=split),output_types=(tf.float32,tf.float32,tf.float32),output_shapes=((),None,None))#.repeat(1)#int(batch_size/2))
+        other_ds = tf.data.Dataset.from_generator(lambda: generator(label=0.0,reader=other_reader,split=split),output_types=(tf.float32,tf.float32,tf.float32),output_shapes=((),None,None))#.repeat(1)#int(batch_size/2))
 
     print("--- [DEBUG] Merging Datasets ---", flush=True)
 
