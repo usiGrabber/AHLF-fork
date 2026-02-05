@@ -1,0 +1,14 @@
+name: ahlf_training_tf2
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    - tensorflow[and-cuda]==2.20.0
+    - numpy>=2.0
+    - pyteomics>=4.7.5
+    - wandb>=0.22
+    - matplotlib>=3.7.2
+    - shap>=0.42.1
