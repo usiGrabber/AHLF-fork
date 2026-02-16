@@ -130,7 +130,7 @@ class BucketWriter:
         return self.counts
 
 
-def shuffle_mgf_parallel(input_file, output_dir, num_buckets=100, seed=42,
+def shuffle_mgf_parallel(input_dir, output_dir, num_buckets=100, seed=42,
                          batch_size=100, progress_interval=50000):
     """
     Shuffle a large MGF file using parallel bucket writing.
@@ -145,18 +145,18 @@ def shuffle_mgf_parallel(input_file, output_dir, num_buckets=100, seed=42,
     """
     random.seed(seed)
 
-    input_path = Path(input_file)
+    input_dir = Path(input_dir)
 
     # Determine suffix from input file (.phos.mgf or .other.mgf)
-    if '.phos.mgf' in input_path.name:
+    if 'with_phospho' in str(input_dir):
         suffix = '.phos.mgf'
-    elif '.other.mgf' in input_path.name:
+    elif 'without_phospho' in str(input_dir):
         suffix = '.other.mgf'
     else:
-        suffix = '.mgf'
-
-    print(f"=== Shuffling {input_path.name} ===", flush=True)
-    print(f"  Input: {input_file}", flush=True)
+        raise ValueError(f"Cant determine if it contains phospho or not from file name: {input_dir.name}")
+       
+    print(f"=== Shuffling {input_dir.name} ===", flush=True)
+    print(f"  Input: {input_dir}", flush=True)
     print(f"  Output dir: {output_dir}", flush=True)
     print(f"  Suffix: {suffix}", flush=True)
     print(f"  Buckets: {num_buckets}", flush=True)
@@ -167,30 +167,30 @@ def shuffle_mgf_parallel(input_file, output_dir, num_buckets=100, seed=42,
 
     # Create bucket writer
     writer = BucketWriter(output_dir, suffix, num_buckets, batch_size)
-
+    print("\nDistributing spectra to buckets (parallel writes)...", flush=True)
+    spectrum_count = 0
     try:
-        print("\nDistributing spectra to buckets (parallel writes)...", flush=True)
+        for input_file in input_dir.glob("*.mgf"):
+            print(f"Using file: {input_file}")
+            with mgf.read(str(input_file), use_index=False) as reader:
+                for spectrum in reader:
+                    # Skip empty spectra
+                    if len(spectrum['m/z array']) == 0:
+                        continue
 
-        spectrum_count = 0
-        with mgf.read(input_file, use_index=False) as reader:
-            for spectrum in reader:
-                # Skip empty spectra
-                if len(spectrum['m/z array']) == 0:
-                    continue
+                    # Assign to random bucket
+                    bucket_idx = random.randint(0, num_buckets - 1)
+                    writer.add_spectrum(bucket_idx, spectrum)
+                    spectrum_count += 1
 
-                # Assign to random bucket
-                bucket_idx = random.randint(0, num_buckets - 1)
-                writer.add_spectrum(bucket_idx, spectrum)
-                spectrum_count += 1
+                    if spectrum_count % progress_interval == 0:
+                        print(f"  Processed {spectrum_count:,} spectra...", flush=True)
 
-                if spectrum_count % progress_interval == 0:
-                    print(f"  Processed {spectrum_count:,} spectra...", flush=True)
+                    # Periodic memory cleanup
+                    if spectrum_count % 100000 == 0:
+                        gc.collect()
 
-                # Periodic memory cleanup
-                if spectrum_count % 100000 == 0:
-                    gc.collect()
-
-        print(f"\n  Total spectra read: {spectrum_count:,}", flush=True)
+            print(f"\n  Total spectra read: {spectrum_count:,}", flush=True)
 
     finally:
         bucket_counts = writer.close()
@@ -211,7 +211,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Shuffle large MGF files using parallel bucket writing"
     )
-    parser.add_argument("input_file", help="Input MGF file path")
+    parser.add_argument("input_dir", help="Input directory where every *.mgf file will be used")
     parser.add_argument("output_dir", help="Output directory for bucket files")
     parser.add_argument("--buckets", type=int, default=100,
                         help="Number of bucket files (default: 100)")
@@ -224,12 +224,12 @@ def main():
 
     args = parser.parse_args()
 
-    if not os.path.exists(args.input_file):
-        print(f"Error: Input file not found: {args.input_file}", file=sys.stderr)
+    if not os.path.exists(args.input_dir):
+        print(f"Error: Input dir not found: {args.input_dir}", file=sys.stderr)
         sys.exit(1)
 
     shuffle_mgf_parallel(
-        input_file=args.input_file,
+        input_dir=args.input_dir,
         output_dir=args.output_dir,
         num_buckets=args.buckets,
         seed=args.seed,

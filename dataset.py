@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, List
 from pyteomics import mgf
 import tensorflow as tf
 import numpy as np
@@ -130,12 +130,12 @@ def tf_maxpool_with_argmax(dense,k):
     return x,i
 
 # NAME=Matthis
-# def ion_current_normalize(intensities):
-#     # Option 1: Max Scaling (Recommended - sets highest peak to 1.0)
-#     max_val = tf.reduce_max(intensities)
+def ion_current_normalize(intensities):
+    # Option 1: Max Scaling (Recommended - sets highest peak to 1.0)
+    max_val = tf.reduce_max(intensities)
     
-#     # Avoid division by zero if spectrum is empty
-#     return tf.math.divide_no_nan(intensities, max_val)
+    # Avoid division by zero if spectrum is empty
+    return tf.math.divide_no_nan(intensities, max_val)
 
 # NAME=l2
 # def ion_current_normalize(intensities):
@@ -146,10 +146,10 @@ def tf_maxpool_with_argmax(dense,k):
 #     return tf.math.divide_no_nan(intensities, max_val)
 
 # NAME=ORIGINAL
-def ion_current_normalize(intensities):
-    total_sum = tf.reduce_sum(intensities**2)
-    normalized = intensities/total_sum
-    return normalized
+# def ion_current_normalize(intensities):
+#     total_sum = tf.reduce_sum(intensities**2)
+#     normalized = intensities/total_sum
+#     return normalized
 
 def standardize(intensities,global_mean,global_var,noise=False):
     #ion_current = tf.reduce_sum(intensities**2)
@@ -178,69 +178,41 @@ def parse(dummy,mz,intensity):
 
 MAX_FILE_BUCKETS = 400
 
-def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='training', weights=None, split='train', val_ratio=0.1):
+def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None, is_balanced: bool = True):
     """
     Args:
         split: 'train', 'val', or 'all' (no splitting). Used for train/val separation.
         val_ratio: Fraction of data for validation (default 0.1 = 10%)
     """
     # --- CONFIG ---
-    buffer_size = 50000
+    buffer_size = 100_000
     print("--- [DEBUG] Starting get_dataset execution ---", flush=True)
 
-    def file_based_train_val_split(paths, split):
-        threshold_bucket = val_ratio * MAX_FILE_BUCKETS
-        for path in paths:
-            # bucket_index = re.search("bucket_([0-9]{4})", "bucket_0394.phos.mgf").group(1)
-            bucket_index = int(re.search("bucket_([0-9]{4})", str(path)).group(1))
-            if bucket_index < threshold_bucket:
-                mode = "val"
-            else:
-                mode = "train"
-            
-            if mode == split:
-                yield path
+    
 
 
     # 1. Collect File Paths
-    phos_path = [glob.glob('%s/*.phos.mgf' % (x)) for x in dataset]
-    phos_path = [i for g in phos_path for i in g]
-    phos_path = list(file_based_train_val_split(phos_path, split))
+    phos_path = [glob.glob(pathname='%s*.phos.mgf' % (x), recursive=True) for x in dataset] + [glob.glob(pathname='%s**/*.phos.mgf' % (x), recursive=True) for x in dataset]
+    phos_path = list(set([i for g in phos_path for i in g]))
     
-    other_path = [glob.glob('%s/*.other.mgf' % (x)) for x in dataset]
-    other_path = [i for g in other_path for i in g]
-    other_path = list(file_based_train_val_split(other_path, split))
+    
+    other_path = [glob.glob('%s*.other.mgf' % (x), recursive=True) for x in dataset] + [glob.glob('%s**/*.other.mgf' % (x), recursive=True) for x in dataset]
+    other_path = list(set([i for g in other_path for i in g]))
+    
 
-  
+    print(f"--- [DEBUG] File Search Complete: Found {len(phos_path)} PHOS files and {len(other_path)} OTHER files --- {mode}", flush=True)
 
-
-    print(f"--- [DEBUG] File Search Complete: Found {len(phos_path)} PHOS files and {len(other_path)} OTHER files --- {split}", flush=True)
-
-    if mode == 'training' or mode == 'test':
+    if mode == 'training':
         np.random.shuffle(phos_path)
         np.random.shuffle(other_path)
 
     # Compute validation threshold from ratio (e.g., 0.1 -> samples with hash % 1000 < 100 go to val)
-    hash_modulo = 400
-    val_threshold = int(hash_modulo * val_ratio)
 
     # 2. Generator with train/val split support
-    def generator(file_list, label, split):
-        # def belongs_to_split(mz_array):
-        #     """Determine if sample belongs to train or val based on hash of m/z data."""
-        #     if split == 'all':
-        #         return True
-        #     sample_hash = hash(mz_array.tobytes()) % hash_modulo
-        #     is_val = sample_hash < val_threshold
-        #     if split == 'val':
-        #         return is_val
-        #     else:  # split == 'train'
-        #         return not is_val
+    def generator(file_list, label):
 
-        for i, file_path in enumerate(file_list):
-            # Print occasionally to show life
-           
-            print(f"--- [DEBUG] Generator processing file #{i} {split}: {os.path.basename(file_path)} ---", flush=True)
+        for i, file_path in enumerate(file_list):           
+            print(f"--- [DEBUG] Generator processing file #{i} {mode}: {os.path.basename(file_path)} ---", flush=True)
 
             try:
                 # use_index=False is CRITICAL to prevent memory explosion
@@ -256,35 +228,42 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
                 print(f"[ERROR] Failed reading {file_path}: {e}", flush=True)
                 continue
 
-            # Simple cleanup
-            if i % 10 == 0:
-                gc.collect()
-
     print("--- [DEBUG] Defining Generators (Lazy Loading) ---", flush=True)
 
     phos_ds = tf.data.Dataset.from_generator(
-        lambda: generator(phos_path, 1.0, split),
+        lambda: generator(phos_path, 1.0),
         output_types=(tf.float32, tf.float32, tf.float32),
         output_shapes=((), None, None)
     )
 
     other_ds = tf.data.Dataset.from_generator(
-        lambda: generator(other_path, 0.0, split),
+        lambda: generator(other_path, 0.0),
         output_types=(tf.float32, tf.float32, tf.float32),
         output_shapes=((), None, None)
     )
 
     print("--- [DEBUG] Merging Datasets ---", flush=True)
 
-    # --- FIX: Use experimental.sample_from_datasets for older TF versions ---
-    if mode == 'training':
-        if weights is None: weights = [0.5, 0.5]
-        ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights)
-    elif mode == 'test':
-        if weights is None: weights = [0.5, 0.5]
-        ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights, seed=42)
-    elif mode == 'inference':
-        ds = other_ds.concatenate(phos_ds)
+    if is_balanced:
+        print(f"Balancing dataset: 50/50 {mode}", flush=True)
+        # --- FIX: Use experimental.sample_from_datasets for older TF versions ---
+        if mode == 'training':
+            if weights is None: weights = [0.5, 0.5]
+            ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights)
+        elif mode == 'test':
+            if weights is None: weights = [0.5, 0.5]
+            ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights, seed=42)
+        elif mode == 'inference':
+            ds = other_ds.concatenate(phos_ds)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+    else:
+        print(f"Interleaving dataset (unbalanced) {mode}", flush=True)
+        ds = tf.data.Dataset.from_tensor_slices([phos_ds, other_ds]).interleave(
+            lambda x: x,
+            cycle_length=2,
+            block_length=1
+        )
 
     print("--- [DEBUG] Applying Map Functions ---", flush=True)
 
@@ -293,17 +272,20 @@ def get_dataset(dataset=['train'], maximum_steps=None, batch_size=16, mode='trai
         lambda label, mz, intensities: tuple(modulo_parse(label, mz, intensities)),
         num_parallel_calls=4
     )
+       
 
-    if maximum_steps is None:
-        ds = ds.repeat()
-    else:
-        ds = ds.repeat(int(maximum_steps/2))
+    if mode == "training":
+        # ds = ds.repeat()
+        # if maximum_steps is None:
+        #     ds = ds.repeat()
+        # else:
+        #     ds = ds.repeat(int(maximum_steps/2))
 
-    if mode in ['training', 'test']:
         print("--- [DEBUG] Initializing Shuffle Buffer (May take time to fill) ---", flush=True)
         ds = ds.shuffle(buffer_size=buffer_size, reshuffle_each_iteration=False)
 
-    ds = ds.batch(batch_size, drop_remainder=False)
+    # Drop reminder to avoid small batch
+    ds = ds.batch(batch_size, drop_remainder=True)
     ds = ds.prefetch(buffer_size=5)
 
     print("--- [DEBUG] Dataset Ready. Returning to Main Loop. ---", flush=True)
