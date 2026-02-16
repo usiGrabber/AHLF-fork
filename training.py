@@ -42,24 +42,46 @@ config = wandb.config
 print(f"Using run name: {wandb.run.name}", flush=True)
 
 class ValidationCallback(tf.keras.callbacks.Callback):
-    """Run validation every val_freq training steps."""
+    """Run validation every val_freq training steps.
+
+    Uses a manual forward pass instead of model.evaluate() to avoid
+    resetting training metric accumulators (TF 2.4 shared state bug).
+    """
 
     def __init__(self, val_data, val_freq):
         super().__init__()
         self.val_data = val_data
         self.val_freq = val_freq
         self.step_count = 0
+        # Own metric instances — completely independent from model.fit() state
+        self.val_loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+        self.val_metrics = {
+            'loss': tf.keras.metrics.Mean(),
+            'binary_accuracy': tf.keras.metrics.BinaryAccuracy(),
+            'recall': tf.keras.metrics.Recall(),
+            'precision': tf.keras.metrics.Precision(),
+        }
 
     def on_train_batch_end(self, batch, logs=None):
         self.step_count += 1
         if self.step_count % self.val_freq == 0:
-            val_results = self.model.evaluate(
-                self.val_data,
-                verbose=0,
-                return_dict=True
-            )
-            # Log with val_ prefix to wandb
-            wandb.log({f'val_{k}': v for k, v in val_results.items()}, step=self.step_count)
+            # Reset our own val metrics
+            for m in self.val_metrics.values():
+                m.reset_states()
+
+            for x_batch, y_batch in self.val_data:
+                preds = self.model(x_batch, training=False)
+                loss = self.val_loss_fn(y_batch, preds)
+                self.val_metrics['loss'].update_state(loss)
+                self.val_metrics['binary_accuracy'].update_state(y_batch, preds)
+                self.val_metrics['recall'].update_state(y_batch, preds)
+                self.val_metrics['precision'].update_state(y_batch, preds)
+
+            val_results = {k: float(m.result()) for k, m in self.val_metrics.items()}
+
+            val_log = {f'val_{k}': v for k, v in val_results.items()}
+            val_log['val_step'] = self.step_count
+            wandb.log(val_log, commit=False)
             print(f"\nStep {self.step_count} - Val: " +
                   ", ".join([f"{k}: {v:.4f}" for k, v in val_results.items()]))
 
@@ -108,7 +130,7 @@ batch_size=config.batch_size
 #     data_path = f.readlines()
 
 # data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/1/']
-data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/pass_threshold_shuffled/"]
+data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/"]
 validation_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/validation/"]
 
 wandb.run.config.data_path = data_path
@@ -135,7 +157,9 @@ callbacks = [
 ]
 
 if train:
-    model.fit(train_data, epochs=40, callbacks=callbacks)
+    print(f"\n[FIX] steps_per_epoch=37000 — epoch boundaries are logical, not data-driven")
+    print(f"[FIX] With ds.repeat(), no shuffle buffer drain at epoch boundaries\n")
+    model.fit(train_data, epochs=40, steps_per_epoch=37000, callbacks=callbacks)
 
 if saving:
     model.save_weights('model_weights_train2.hdf5')

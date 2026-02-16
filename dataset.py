@@ -275,14 +275,12 @@ def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None
        
 
     if mode == "training":
-        # ds = ds.repeat()
-        # if maximum_steps is None:
-        #     ds = ds.repeat()
-        # else:
-        #     ds = ds.repeat(int(maximum_steps/2))
+        ds = ds.repeat()
+        print(f"--- [FIX] ds.repeat() enabled — dataset is infinite, no epoch boundary drain ---", flush=True)
 
         print("--- [DEBUG] Initializing Shuffle Buffer (May take time to fill) ---", flush=True)
-        ds = ds.shuffle(buffer_size=buffer_size, reshuffle_each_iteration=False)
+        ds = ds.shuffle(buffer_size=buffer_size, reshuffle_each_iteration=True)
+        print(f"--- [FIX] reshuffle_each_iteration=True — buffer re-randomizes each pass ---", flush=True)
 
     # Drop reminder to avoid small batch
     ds = ds.batch(batch_size, drop_remainder=True)

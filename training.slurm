@@ -4,7 +4,7 @@
 #SBATCH --time=48:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --partition=gpu-batch
 #SBATCH --gpus=1
 #SBATCH --constraint="GPU_SKU:V100&ARCH:X86"
