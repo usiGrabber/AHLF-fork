@@ -244,9 +244,14 @@ def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None
 
     print("--- [DEBUG] Merging Datasets ---", flush=True)
 
+    # Repeat individual datasets before merging so neither exhausts first
+    if mode == 'training':
+        phos_ds = phos_ds.repeat()
+        other_ds = other_ds.repeat()
+        print(f"--- [FIX] Individual datasets repeated — no class imbalance from exhaustion ---", flush=True)
+
     if is_balanced:
         print(f"Balancing dataset: 50/50 {mode}", flush=True)
-        # --- FIX: Use experimental.sample_from_datasets for older TF versions ---
         if mode == 'training':
             if weights is None: weights = [0.5, 0.5]
             ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights)
@@ -259,11 +264,7 @@ def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None
             raise ValueError(f"Unknown mode: {mode}")
     else:
         print(f"Interleaving dataset (unbalanced) {mode}", flush=True)
-        ds = tf.data.Dataset.from_tensor_slices([phos_ds, other_ds]).interleave(
-            lambda x: x,
-            cycle_length=2,
-            block_length=1
-        )
+        ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights=[0.5, 0.5])
 
     print("--- [DEBUG] Applying Map Functions ---", flush=True)
 
@@ -272,15 +273,11 @@ def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None
         lambda label, mz, intensities: tuple(modulo_parse(label, mz, intensities)),
         num_parallel_calls=4
     )
-       
+
 
     if mode == "training":
-        ds = ds.repeat()
-        print(f"--- [FIX] ds.repeat() enabled — dataset is infinite, no epoch boundary drain ---", flush=True)
-
         print("--- [DEBUG] Initializing Shuffle Buffer (May take time to fill) ---", flush=True)
         ds = ds.shuffle(buffer_size=buffer_size, reshuffle_each_iteration=True)
-        print(f"--- [FIX] reshuffle_each_iteration=True — buffer re-randomizes each pass ---", flush=True)
 
     # Drop reminder to avoid small batch
     ds = ds.batch(batch_size, drop_remainder=True)

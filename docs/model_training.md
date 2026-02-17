@@ -4,10 +4,10 @@
 ### Shuffling
 Our goal is to create such a structure:
 
-- training/0/with_phospho/*.mgf
-- training/0/without_phospho/*mgf
-- training/1/with_phospho/*.mgf
-- training/1/without_phospho/*mgf
+- training/0/with_phospho/*.mgf (21.08%) (420)
+- training/0/without_phospho/*mgf (36.54%) (730)
+- training/1/with_phospho/*.mgf (23.86%) (477)
+- training/1/without_phospho/*mgf (18.52%) (370)
 
 - val/with_phospho/data.mgf
 - val/without_phospho/data.mgf
@@ -58,6 +58,17 @@ mv training_shuffled/0/with_phospho/bucket_000[0-4]* validation/0/with_phospho/
 mv training_shuffled/1/with_phospho/bucket_000[0-4]* validation/1/with_phospho/
 mv training_shuffled/1/without_phospho/bucket_000[0-4]* validation/1/without_phospho/
 mv training_shuffled/0/without_phospho/bucket_000[0-4]* validation/0/without_phospho/
+```
+
+```bash
+mkdir -p validation_final/0/with_phospho/
+mkdir -p validation_final/0/without_phospho/
+mkdir -p validation_final/1/with_phospho/
+mkdir -p validation_final/1/without_phospho/
+mv training_shuffled_final/0/with_phospho/bucket_00[0-3][0-9]* validation_final/0/with_phospho/
+mv training_shuffled_final/1/with_phospho/bucket_00[0-3][0-9]* validation_final/1/with_phospho/
+mv training_shuffled_final/1/without_phospho/bucket_00[0-3][0-9]* validation_final/1/without_phospho/
+mv training_shuffled_final/0/without_phospho/bucket_00[0-3][0-9]* validation_final/0/without_phospho/
 ```
 
 ### Random 50/50 Split Creation

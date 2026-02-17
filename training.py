@@ -69,6 +69,7 @@ class ValidationCallback(tf.keras.callbacks.Callback):
             for m in self.val_metrics.values():
                 m.reset_states()
 
+            i = 0
             for x_batch, y_batch in self.val_data:
                 preds = self.model(x_batch, training=False)
                 loss = self.val_loss_fn(y_batch, preds)
@@ -76,6 +77,9 @@ class ValidationCallback(tf.keras.callbacks.Callback):
                 self.val_metrics['binary_accuracy'].update_state(y_batch, preds)
                 self.val_metrics['recall'].update_state(y_batch, preds)
                 self.val_metrics['precision'].update_state(y_batch, preds)
+                i += 1
+
+            print(f"Ran validation on {i} individual batches of data")
 
             val_results = {k: float(m.result()) for k, m in self.val_metrics.items()}
 
@@ -130,8 +134,8 @@ batch_size=config.batch_size
 #     data_path = f.readlines()
 
 # data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/1/']
-data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/"]
-validation_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/validation/"]
+data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled_final/1/"]
+validation_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/validation_final/"]
 
 wandb.run.config.data_path = data_path
 wandb.run.config.validation_path = validation_path
