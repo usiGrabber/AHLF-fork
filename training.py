@@ -29,10 +29,10 @@ wandb.init(
         "batch_size": 128,
         "epochs": 10,
         "input_shape": [3600, 2],
-        "val_freq": 2000,
+        "val_freq": 4000,
         "checkpoint_freq": 4000,
         "val_ratio": 0.1,
-        "ion_current_normalize": "matthis",
+        "ion_current_normalize": "original",
         "is_balanced": False
     }
 )
@@ -90,6 +90,51 @@ class ValidationCallback(tf.keras.callbacks.Callback):
                   ", ".join([f"{k}: {v:.4f}" for k, v in val_results.items()]))
 
 
+class RawBatchLogger(tf.keras.callbacks.Callback):
+    """Logs true per-batch metrics alongside the epoch-long smoothed average.
+
+    WandbMetricsLogger logs Keras running averages — these reset at each epoch
+    boundary and are dragged by early high-loss steps. This callback derives the
+    raw per-batch loss from the running average and logs a short-window (log_freq)
+    average as 'raw/loss' etc., giving an epoch-reset-free view of training.
+    """
+
+    def __init__(self, log_freq=50):
+        super().__init__()
+        self.log_freq = log_freq
+        self._step_in_epoch = 0
+        self._global_step = 0
+        self._prev = {}       # previous running avg values, reset each epoch
+        self._window = {}     # accumulated per-batch values for current window
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self._step_in_epoch = 0
+        self._prev = {}
+        self._window = {}
+
+    def on_train_batch_end(self, batch, logs=None):
+        if logs is None:
+            return
+        self._step_in_epoch += 1
+        self._global_step += 1
+        n = self._step_in_epoch
+
+        for key, running_avg in logs.items():
+            # Reconstruct per-batch value from the running average:
+            # running_avg_N = total_N / N  =>  per_batch = total_N - total_{N-1}
+            #                               = running_avg_N * N - running_avg_{N-1} * (N-1)
+            prev = self._prev.get(key, running_avg)  # first step: treat prev = current
+            per_batch = running_avg * n - prev * (n - 1)
+            self._window.setdefault(key, []).append(per_batch)
+            self._prev[key] = running_avg
+
+        if self._step_in_epoch % self.log_freq == 0:
+            raw_log = {f'raw/{k}': sum(v) / len(v) for k, v in self._window.items()}
+            raw_log['raw/batch_step'] = self._global_step
+            wandb.log(raw_log, commit=False)
+            self._window = {}
+
+
 class StepCheckpointCallback(tf.keras.callbacks.Callback):
     """Save checkpoint every checkpoint_freq training steps."""
 
@@ -134,7 +179,7 @@ batch_size=config.batch_size
 #     data_path = f.readlines()
 
 # data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/1/']
-data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled_final/1/"]
+data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled_final/0/"]
 validation_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/validation_final/"]
 
 wandb.run.config.data_path = data_path
@@ -155,7 +200,8 @@ val_data = get_dataset(
 ).prefetch(buffer_size=AUTOTUNE)
 
 callbacks = [
-    WandbMetricsLogger(log_freq=50),
+    WandbMetricsLogger(log_freq=50),       # smoothed: epoch-long running avg → batch/*
+    RawBatchLogger(log_freq=50),            # raw: 50-batch window avg → raw/*
     ValidationCallback(val_data, val_freq=config.val_freq),
     StepCheckpointCallback(checkpoint_freq=config.checkpoint_freq)
 ]
@@ -163,7 +209,7 @@ callbacks = [
 if train:
     print(f"\n[FIX] steps_per_epoch=37000 — epoch boundaries are logical, not data-driven")
     print(f"[FIX] With ds.repeat(), no shuffle buffer drain at epoch boundaries\n")
-    model.fit(train_data, epochs=40, steps_per_epoch=37000, callbacks=callbacks)
+    model.fit(train_data, epochs=config.epochs, steps_per_epoch=37000, callbacks=callbacks)
 
 if saving:
     model.save_weights('model_weights_train2.hdf5')
