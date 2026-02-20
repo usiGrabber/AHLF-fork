@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=ahlf-training
 #SBATCH --output=slurm_ahlf_training_%j.out
-#SBATCH --time=48:00:00
+#SBATCH --time=167:59:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G

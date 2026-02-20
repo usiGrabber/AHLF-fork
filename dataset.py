@@ -178,7 +178,7 @@ def parse(dummy,mz,intensity):
 
 MAX_FILE_BUCKETS = 400
 
-def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None, is_balanced: bool = True):
+def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None):
     """
     Args:
         split: 'train', 'val', or 'all' (no splitting). Used for train/val separation.
@@ -250,22 +250,19 @@ def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None
         other_ds = other_ds.repeat()
         print(f"--- [FIX] Individual datasets repeated — no class imbalance from exhaustion ---", flush=True)
 
-    if is_balanced:
-        print(f"Balancing dataset: 50/50 {mode}", flush=True)
-        if mode == 'training':
-            if weights is None: weights = [0.5, 0.5]
-            ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights)
-        elif mode == 'test':
-            if weights is None: weights = [0.5, 0.5]
-            ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights, seed=42)
-        elif mode == 'inference':
-            ds = other_ds.concatenate(phos_ds)
-        else:
-            raise ValueError(f"Unknown mode: {mode}")
+    
+    if mode == 'training':
+        if weights is None: weights = [0.5, 0.5]
+        ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights)
+    elif mode == 'test':
+        if weights is None: weights = [0.5, 0.5]
+        ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights, seed=42)
+    elif mode == 'inference':
+        ds = other_ds.concatenate(phos_ds)
     else:
-        print(f"Interleaving dataset (unbalanced) {mode}", flush=True)
-        ds = tf.data.experimental.sample_from_datasets([phos_ds, other_ds], weights=[0.5, 0.5])
-
+        raise ValueError(f"Unknown mode: {mode}")
+    
+   
     print("--- [DEBUG] Applying Map Functions ---", flush=True)
 
     # 3. Pipeline Construction

@@ -1,6 +1,7 @@
 import tensorflow as tf
 import wandb
 import os
+import numpy as np
 
 from wandb.integration.keras import WandbMetricsLogger
 from dataset import get_dataset
@@ -31,9 +32,7 @@ wandb.init(
         "input_shape": [3600, 2],
         "val_freq": 4000,
         "checkpoint_freq": 4000,
-        "val_ratio": 0.1,
-        "ion_current_normalize": "original",
-        "is_balanced": False
+        "ion_current_normalize": "matthis",
     }
 )
 
@@ -61,13 +60,18 @@ class ValidationCallback(tf.keras.callbacks.Callback):
             'recall': tf.keras.metrics.Recall(),
             'precision': tf.keras.metrics.Precision(),
         }
-
     def on_train_batch_end(self, batch, logs=None):
         self.step_count += 1
         if self.step_count % self.val_freq == 0:
             # Reset our own val metrics
             for m in self.val_metrics.values():
                 m.reset_states()
+
+            # Per-class accuracy: numpy accumulators — avoids TF metric empty-tensor NaN
+            phospho_correct = 0
+            phospho_total = 0
+            non_phospho_correct = 0
+            non_phospho_total = 0
 
             i = 0
             for x_batch, y_batch in self.val_data:
@@ -77,11 +81,22 @@ class ValidationCallback(tf.keras.callbacks.Callback):
                 self.val_metrics['binary_accuracy'].update_state(y_batch, preds)
                 self.val_metrics['recall'].update_state(y_batch, preds)
                 self.val_metrics['precision'].update_state(y_batch, preds)
+                # Per-class accuracy via numpy (avoids TF metrics shape/empty-tensor issues)
+                y_np = y_batch.numpy().flatten()
+                pred_np = (preds.numpy().flatten() >= 0.5).astype(float)
+                phospho_idx = y_np == 1.0
+                non_phospho_idx = y_np == 0.0
+                phospho_correct += int(np.sum(pred_np[phospho_idx] == y_np[phospho_idx]))
+                phospho_total += int(np.sum(phospho_idx))
+                non_phospho_correct += int(np.sum(pred_np[non_phospho_idx] == y_np[non_phospho_idx]))
+                non_phospho_total += int(np.sum(non_phospho_idx))
                 i += 1
 
-            print(f"Ran validation on {i} individual batches of data")
+            print(f"Ran validation on {i} batches: {phospho_total} phospho, {non_phospho_total} non-phospho samples")
 
             val_results = {k: float(m.result()) for k, m in self.val_metrics.items()}
+            val_results['acc_phospho'] = phospho_correct / phospho_total if phospho_total > 0 else float('nan')
+            val_results['acc_non_phospho'] = non_phospho_correct / non_phospho_total if non_phospho_total > 0 else float('nan')
 
             val_log = {f'val_{k}': v for k, v in val_results.items()}
             val_log['val_step'] = self.step_count
@@ -168,10 +183,6 @@ learning_rate=config.learning_rate
 model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate,clipnorm=1.0),loss=bce,metrics=['binary_accuracy','Recall','Precision'])
 
 batch_size=config.batch_size
-# Total samples in training directory (50/50 phospho/non-phospho)
-# num_samples= 6596016 * 2
-# # Adjust for train/val split - only (1 - val_ratio) of samples go to training
-# steps_per_epoch = int(num_samples * (1 - config.val_ratio)) // batch_size
 
 # dataset_path_list = "/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/bucket0.txt"
 
@@ -179,7 +190,7 @@ batch_size=config.batch_size
 #     data_path = f.readlines()
 
 # data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/1/']
-data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled_final/0/"]
+data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled_final/"]
 validation_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/validation_final/"]
 
 wandb.run.config.data_path = data_path
@@ -189,14 +200,12 @@ train_data = get_dataset(
     dataset=data_path,
     batch_size=batch_size,
     mode='training',
-    is_balanced=config.is_balanced
 ).prefetch(buffer_size=AUTOTUNE)
 
 val_data = get_dataset(
     dataset=validation_path,
     batch_size=batch_size,
     mode='test',
-    is_balanced=True
 ).prefetch(buffer_size=AUTOTUNE)
 
 callbacks = [
