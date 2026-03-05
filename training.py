@@ -8,10 +8,8 @@ from dataset import get_dataset
 from network import network
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-# tf.compat.v1.disable_eager_execution()  # causes compatibility issues with TF 2.x
 
 train = True
-saving = True
 
 # Initialize wandb. Use disabled mode for debugging without logging.
 # wandb.init(mode="disabled")
@@ -32,7 +30,7 @@ wandb.init(
         "input_shape": [3600, 2],
         "val_freq": 4000,
         "checkpoint_freq": 4000,
-        "ion_current_normalize": "matthis",
+        "ion_current_normalize": "max",
     }
 )
 
@@ -44,7 +42,7 @@ class ValidationCallback(tf.keras.callbacks.Callback):
     """Run validation every val_freq training steps.
 
     Uses a manual forward pass instead of model.evaluate() to avoid
-    resetting training metric accumulators (TF 2.4 shared state bug).
+    resetting training metric accumulators
     """
 
     def __init__(self, val_data, val_freq):
@@ -67,7 +65,6 @@ class ValidationCallback(tf.keras.callbacks.Callback):
             for m in self.val_metrics.values():
                 m.reset_states()
 
-            # Per-class accuracy: numpy accumulators — avoids TF metric empty-tensor NaN
             phospho_correct = 0
             phospho_total = 0
             non_phospho_correct = 0
@@ -81,7 +78,6 @@ class ValidationCallback(tf.keras.callbacks.Callback):
                 self.val_metrics['binary_accuracy'].update_state(y_batch, preds)
                 self.val_metrics['recall'].update_state(y_batch, preds)
                 self.val_metrics['precision'].update_state(y_batch, preds)
-                # Per-class accuracy via numpy (avoids TF metrics shape/empty-tensor issues)
                 y_np = y_batch.numpy().flatten()
                 pred_np = (preds.numpy().flatten() >= 0.5).astype(float)
                 phospho_idx = y_np == 1.0
@@ -119,8 +115,8 @@ class RawBatchLogger(tf.keras.callbacks.Callback):
         self.log_freq = log_freq
         self._step_in_epoch = 0
         self._global_step = 0
-        self._prev = {}       # previous running avg values, reset each epoch
-        self._window = {}     # accumulated per-batch values for current window
+        self._prev = {}       
+        self._window = {}  
 
     def on_epoch_begin(self, epoch, logs=None):
         self._step_in_epoch = 0
@@ -135,9 +131,6 @@ class RawBatchLogger(tf.keras.callbacks.Callback):
         n = self._step_in_epoch
 
         for key, running_avg in logs.items():
-            # Reconstruct per-batch value from the running average:
-            # running_avg_N = total_N / N  =>  per_batch = total_N - total_{N-1}
-            #                               = running_avg_N * N - running_avg_{N-1} * (N-1)
             prev = self._prev.get(key, running_avg)  # first step: treat prev = current
             per_batch = running_avg * n - prev * (n - 1)
             self._window.setdefault(key, []).append(per_batch)
@@ -184,12 +177,6 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate,cli
 
 batch_size=config.batch_size
 
-# dataset_path_list = "/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/bucket0.txt"
-
-# with open(dataset_path_list, "r") as f:
-#     data_path = f.readlines()
-
-# data_path = ['/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled/1/']
 data_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled_final/"]
 validation_path = ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/validation_final/"]
 
@@ -216,9 +203,4 @@ callbacks = [
 ]
 
 if train:
-    print(f"\n[FIX] steps_per_epoch=37000 — epoch boundaries are logical, not data-driven")
-    print(f"[FIX] With ds.repeat(), no shuffle buffer drain at epoch boundaries\n")
     model.fit(train_data, epochs=config.epochs, steps_per_epoch=37000, callbacks=callbacks)
-
-if saving:
-    model.save_weights('model_weights_train2.hdf5')

@@ -1,11 +1,9 @@
-from typing import Literal, List
+from typing import List
 from pyteomics import mgf
 import tensorflow as tf
 import numpy as np
 import glob
-import gc
 import os
-import re
 
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -129,7 +127,7 @@ def tf_maxpool_with_argmax(dense,k):
     i = tf.math.argmax(dense,axis=-1)
     return x,i
 
-# NAME=Matthis
+# NAME=max
 def ion_current_normalize(intensities):
     # Option 1: Max Scaling (Recommended - sets highest peak to 1.0)
     max_val = tf.reduce_max(intensities)
@@ -141,10 +139,11 @@ def ion_current_normalize(intensities):
 # def ion_current_normalize(intensities):
 #     # Option 1: Max Scaling (Recommended - sets highest peak to 1.0)
 #     max_val = tf.reduce_sum((intensities**2)**0.5)
-    
+
 #     # Avoid division by zero if spectrum is empty
 #     return tf.math.divide_no_nan(intensities, max_val)
 
+# USE THIS FUNCTION WHEN EVALUATING THE ORIGINAL AHLF CHECKPOINTS!
 # NAME=ORIGINAL
 # def ion_current_normalize(intensities):
 #     total_sum = tf.reduce_sum(intensities**2)
@@ -176,21 +175,13 @@ def parse(dummy,mz,intensity):
     output = tf.stack([x,i],axis=1)
     return output, dummy 
 
-MAX_FILE_BUCKETS = 400
 
 def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None):
-    """
-    Args:
-        split: 'train', 'val', or 'all' (no splitting). Used for train/val separation.
-        val_ratio: Fraction of data for validation (default 0.1 = 10%)
-    """
     # --- CONFIG ---
     buffer_size = 100_000
     print("--- [DEBUG] Starting get_dataset execution ---", flush=True)
 
     
-
-
     # 1. Collect File Paths
     phos_path = [glob.glob(pathname='%s*.phos.mgf' % (x), recursive=True) for x in dataset] + [glob.glob(pathname='%s**/*.phos.mgf' % (x), recursive=True) for x in dataset]
     phos_path = list(set([i for g in phos_path for i in g]))
@@ -205,8 +196,6 @@ def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None
     if mode == 'training':
         np.random.shuffle(phos_path)
         np.random.shuffle(other_path)
-
-    # Compute validation threshold from ratio (e.g., 0.1 -> samples with hash % 1000 < 100 go to val)
 
     # 2. Generator with train/val split support
     def generator(file_list, label):
@@ -248,7 +237,7 @@ def get_dataset(dataset: List[str], batch_size=16, mode='training', weights=None
     if mode == 'training':
         phos_ds = phos_ds.repeat()
         other_ds = other_ds.repeat()
-        print(f"--- [FIX] Individual datasets repeated — no class imbalance from exhaustion ---", flush=True)
+        print(f"--- Individual datasets repeated  ---", flush=True)
 
     
     if mode == 'training':
