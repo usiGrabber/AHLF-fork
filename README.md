@@ -1,5 +1,3 @@
-[![DOI](https://zenodo.org/badge/257353799.svg)](https://zenodo.org/badge/latestdoi/257353799)
-
 # AHLF - usiGrabber Fork
 
 This repository is a fork based on AHLF and contains the code used to train an AHLF style model based on the dataset collected by the usiGrabber. Here is the original [README](/README_original.md)
