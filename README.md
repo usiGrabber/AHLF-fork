@@ -14,8 +14,8 @@ bioRxiv 2020.05.19.101345; doi: https://doi.org/10.1101/2020.05.19.101345
 To install the required packages create a new conda environment (required packages are automatically installed when using **`ahlf_training_env.yml`**):
 
 ```
-conda env create -f ahlf_env.yml
-conda activate ahlf_env
+conda env create -f ahlf_training_env.yml
+conda activate ahlf_training_env
 ```
 
 ## Preproccesing
