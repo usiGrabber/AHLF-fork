@@ -16,9 +16,10 @@ echo "Starting MGF shuffle job at $(date)"
 echo "Host: $(hostname)"
 echo "Working directory: $(pwd)"
 
-# Input/output paths
+# Input/output paths, script path!
 INPUT_DIR="/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training"
 OUTPUT_DIR="/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/training_shuffled_final"
+SCRIPT_PATH="path to shuffle_mgf.py"
 
 PARTITION="0/with_phospho/"
 # Create output directory
@@ -29,7 +30,7 @@ echo ""
 echo "=========================================="
 echo "Shuffling file..."
 echo "=========================================="
-python /sc/home/konstantin.ketterer/AHLF-fork/shuffle_mgf.py \
+python ${SCRIPT_PATH} \
     "${INPUT_DIR}/${PARTITION}" \
     "${OUTPUT_DIR}/${PARTITION}" \
     --buckets 420 \
@@ -39,7 +40,7 @@ python /sc/home/konstantin.ketterer/AHLF-fork/shuffle_mgf.py \
 
 PARTITION="0/without_phospho/"
 mkdir -p "${OUTPUT_DIR}/${PARTITION}"
-python /sc/home/konstantin.ketterer/AHLF-fork/shuffle_mgf.py \
+python ${SCRIPT_PATH} \
     "${INPUT_DIR}/${PARTITION}" \
     "${OUTPUT_DIR}/${PARTITION}" \
     --buckets 730 \
@@ -49,7 +50,7 @@ python /sc/home/konstantin.ketterer/AHLF-fork/shuffle_mgf.py \
 
 PARTITION="1/with_phospho/"
 mkdir -p "${OUTPUT_DIR}/${PARTITION}"
-python /sc/home/konstantin.ketterer/AHLF-fork/shuffle_mgf.py \
+python ${SCRIPT_PATH} \
     "${INPUT_DIR}/${PARTITION}" \
     "${OUTPUT_DIR}/${PARTITION}" \
     --buckets 477 \
@@ -59,7 +60,7 @@ python /sc/home/konstantin.ketterer/AHLF-fork/shuffle_mgf.py \
 
 PARTITION="1/without_phospho/"
 mkdir -p "${OUTPUT_DIR}/${PARTITION}"
-python /sc/home/konstantin.ketterer/AHLF-fork/shuffle_mgf.py \
+python ${SCRIPT_PATH} \
     "${INPUT_DIR}/${PARTITION}" \
     "${OUTPUT_DIR}/${PARTITION}" \
     --buckets 370 \

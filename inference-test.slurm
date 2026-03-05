@@ -3,8 +3,8 @@
 #SBATCH --output=slurm_ensemble_inference_%j.out
 #SBATCH --time=24:00:00
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=16G
 #SBATCH --partition=gpu-batch
 #SBATCH --gpus=1
 #SBATCH --constraint="GPU_SKU:V100&ARCH:X86"
@@ -15,18 +15,18 @@ eval "$(conda shell.bash hook)"
 conda activate ahlf_interpretation_env
 
 # Define input files
-PHOSPHO_MGF="/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/no_threshold_shuffled3/bucket_0000.phos.mgf"
-NON_PHOSPHO_MGF="/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/no_threshold_shuffled3/bucket_0000.other.mgf"
+PHOSPHO_MGF="/sc/projects/sci-renard/usi-grabber/shared/mgf_files/validation_sp_p.mgf"
+NON_PHOSPHO_MGF="/sc/projects/sci-renard/usi-grabber/shared/mgf_files/validation_sp_non_p.mgf"
 
 # Create output directory
 mkdir -p ensemble_results
 
 echo "Running inference with all four models..."
-# MODEL_DIR=checkpoints
-# MODEL_NAME=wqtthwqo-step_4000.weights
 
-MODEL_DIR=model
-MODEL_NAME=beta_model_weights
+
+MODEL_DIR=checkpoints
+MODEL_NAME="ADD YOUR MODEL NAME WITHOUT THE EXTENSION RIGHT HERE"
+
 RESULTS_DIR=ensemble_results/$MODEL_NAME
 
 mkdir -p $RESULTS_DIR

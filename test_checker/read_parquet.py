@@ -1,5 +1,3 @@
-import pandas as pd
-import pyarrow as pa
 import pyarrow.parquet as pq
 import sys
 import glob
@@ -11,7 +9,8 @@ def construct_usi(row) -> None:
     except Exception as e:
         print("error:", e, file=sys.stderr)
 
-for location in ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/with_phospho/", "/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/without_phospho/"]:
+# for location in ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/with_phospho/", "/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/without_phospho/"]:
+for location in ["/sc/projects/sci-renard/usi-grabber/shared/mgf_files/final/without_phospho/"]:
     for file in glob.glob(pathname=f"{location}**/*.parquet", recursive=True):
         print(file, file=sys.stderr)
 
