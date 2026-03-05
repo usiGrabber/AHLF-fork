@@ -1,6 +1,6 @@
 # AHLF - usiGrabber Fork
 
-This repository is a fork based on [AHLF](https://gitlab.com/dacs-hpi/AHLF)  and contains the code used to train an AHLF style model based on the dataset collected by the usiGrabber.
+This repository is a fork based on [AHLF](https://gitlab.com/dacs-hpi/AHLF)  and contains the code used to train an AHLF style model based on the dataset collected by the [usiGrabber](https://github.com/usiGrabber/usiGrabber).
 
 - We have published our final model weights here: [model/usigrabber_model_weights.hdf5](/model/usigrabber_model_weights.hdf5).
 
