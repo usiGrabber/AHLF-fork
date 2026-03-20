@@ -5,7 +5,7 @@
 This repository is a fork based on [AHLF](https://gitlab.com/dacs-hpi/AHLF)  and contains the code used to train an AHLF style model based on the dataset collected by the [usiGrabber](https://github.com/usiGrabber/usiGrabber).
 
 - We have published our final model weights here: [model/usigrabber_model_weights.hdf5](/model/usigrabber_model_weights.hdf5).
-- The data used for the training is available on Zenodo: [https://zenodo.org/badge/DOI/10.5281/zenodo.18853258.svg](https://doi.org/10.5281/zenodo.18853258)
+- The data used for the training is available on Zenodo: [https://zenodo.org/records/18853258](https://zenodo.org/records/18853258)
 
 ***AHLF: ad hoc learning of peptide fragmentation from mass spectra enables an interpretable detection of phosphorylated and cross-linked peptides***
 
